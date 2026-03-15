@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Med-Q Admin Panel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0c0d0e;
+      color: #f1f5f9;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    h1 { color: #38bdf8; margin-bottom: 20px; font-size: 1.5rem; }
+    h2 { color: #f0cf6a; margin: 25px 0 15px; font-size: 1.1rem; }
+
+    /* LOGIN */
+    #login-screen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; flex-direction: column; gap: 15px;
+    }
+    #login-screen input, #login-screen button {
+      width: 300px; padding: 14px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1); font-size: 1rem;
+    }
+    #login-screen input { background: #1a1c1e; color: #fff; text-align: center; }
+    #login-screen button { background: #38bdf8; color: #000; font-weight: 700; cursor: pointer; border: none; }
+
+    /* PANEL */
+    #admin-panel { display: none; max-width: 800px; margin: 0 auto; }
+
+    /* ADD CODE */
+    .add-section { display: flex; gap: 10px; margin-bottom: 10px; }
+    .add-section input {
+      flex: 1; padding: 12px; background: #1a1c1e;
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #fff;
+    }
+    .add-section button {
+      padding: 12px 20px; background: #38bdf8; color: #000;
+      border: none; border-radius: 10px; font-weight: 700; cursor: pointer;
+    }
+
+    /* STATS */
+    .stats { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+    .stat-card {
+      background: #1a1c1e; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px; padding: 15px 20px; text-align: center; flex: 1; min-width: 120px;
+    }
+    .stat-card .number { font-size: 2rem; font-weight: 700; color: #38bdf8; }
+    .stat-card .label { font-size: 0.8rem; color: #94a3b8; margin-top: 5px; }
+
+    /* TABLE */
+    .codes-table { width: 100%; border-collapse: collapse; }
+    .codes-table th {
+      text-align: left; padding: 10px; color: #94a3b8;
+      font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .codes-table td {
+      padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 0.85rem;
+    }
+    .badge-used { color: #4ade80; font-weight: 600; }
+    .badge-unused { color: #94a3b8; }
+    .action-btn {
+      padding: 5px 10px; border-radius: 6px; border: none;
+      cursor: pointer; font-size: 0.75rem; font-weight: 600; margin-right: 5px;
+    }
+    .btn-delete { background: rgba(255,68,68,0.15); color: #ff4444; }
+    .btn-reset { background: rgba(240,207,106,0.15); color: #f0cf6a; }
+    .msg { margin: 10px 0; padding: 10px; border-radius: 8px; font-size: 0.9rem; }
+    .msg.success { background: rgba(74,222,128,0.1); color: #4ade80; }
+    .msg.error { background: rgba(255,68,68,0.1); color: #ff4444; }
+    .device-id { font-size: 0.7rem; color: #475569; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="login-screen">
+    <h1>🔐 Med-Q Admin</h1>
+    <input type="password" id="admin-pass" placeholder="Enter admin password" />
+    <button onclick="adminLogin()">Login</button>
+    <p id="login-msg" style="color:#ff4444; font-size:0.9rem;"></p>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div id="admin-panel">
+    <h1>⚙️ Med-Q Admin Panel</h1>
+
+    <!-- STATS -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="number" id="total-count">0</div>
+        <div class="label">Total Codes</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" id="used-count" style="color:#4ade80">0</div>
+        <div class="label">Used</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" id="unused-count" style="color:#f0cf6a">0</div>
+        <div class="label">Available</div>
+      </div>
+    </div>
+
+    <!-- ADD CODE -->
+    <h2>➕ Add New Code</h2>
+    <div class="add-section">
+      <input type="text" id="new-code" placeholder="e.g. SHABAZ-USER-AHMED-001" />
+      <button onclick="addCode()">Add</button>
+    </div>
+    <div id="add-msg"></div>
+
+    <!-- CODES TABLE -->
+    <h2>📋 All Codes</h2>
+    <table class="codes-table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Status</th>
+          <th>Device ID</th>
+          <th>Used At</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="codes-body"></tbody>
+    </table>
+  </div>
+
+<script>
+  let adminPassword = '';
+
+  async function adminLogin() {
+    const pass = document.getElementById('admin-pass').value;
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pass })
+    });
+    const data = await res.json();
+    if (data.success) {
+      adminPassword = pass;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('admin-panel').style.display = 'block';
+      loadCodes();
+    } else {
+      document.getElementById('login-msg').innerText = 'Wrong password!';
+    }
+  }
+
+  async function loadCodes() {
+    const res = await fetch('/api/admin/codes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: adminPassword })
+    });
+    const data = await res.json();
+    if (!data.success) return;
+
+    const codes = data.codes;
+    const used = codes.filter(c => c.is_used).length;
+    document.getElementById('total-count').innerText = codes.length;
+    document.getElementById('used-count').innerText = used;
+    document.getElementById('unused-count').innerText = codes.length - used;
+
+    const tbody = document.getElementById('codes-body');
+    tbody.innerHTML = codes.map(c => `
+      <tr>
+        <td><strong>${c.code}</strong></td>
+        <td class="${c.is_used ? 'badge-used' : 'badge-unused'}">
+          ${c.is_used ? '✅ Used' : '⭕ Available'}
+        </td>
+        <td><div class="device-id">${c.used_by_device || '—'}</div></td>
+        <td style="font-size:0.75rem; color:#94a3b8">${c.used_at || '—'}</td>
+        <td>
+          <button class="action-btn btn-reset" onclick="resetCode('${c.code}')">Reset</button>
+          <button class="action-btn btn-delete" onclick="deleteCode('${c.code}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  async function addCode() {
+    const code = document.getElementById('new-code').value.trim();
+    if (!code) return;
+    const res = await fetch('/api/admin/add-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: adminPassword, code })
+    });
+    const data = await res.json();
+    const msgEl = document.getElementById('add-msg');
+    msgEl.className = 'msg ' + (data.success ? 'success' : 'error');
+    msgEl.innerText = data.message;
+    if (data.success) {
+      document.getElementById('new-code').value = '';
+      loadCodes();
+    }
+  }
+
+  async function deleteCode(code) {
+    if (!confirm(`Delete code "${code}"?`)) return;
+    await fetch('/api/admin/delete-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: adminPassword, code })
+    });
+    loadCodes();
+  }
+
+  async function resetCode(code) {
+    await fetch('/api/admin/reset-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: adminPassword, code })
+    });
+    loadCodes();
+  }
+
+  // Login on Enter key
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') adminLogin();
+  });
+</script>
+</body>
+</html>
